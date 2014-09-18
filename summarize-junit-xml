@@ -1,0 +1,97 @@
+#!/usr/bin/env python
+
+# Copyright (c) 2014 Imre Fitos
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. Neither the name of the University nor the names of its contributors
+#    may be used to endorse or promote products derived from this software
+#    without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+
+import sys
+
+from xml.etree import cElementTree
+
+def main(argv):
+    if len(argv) < 2:
+        print "Please specify junit xml report files to summarize"
+        print " e.g. '{} junit/*'".format(argv[0])
+        return False
+
+    feature_cnt = feature_fail_cnt = feature_pass_cnt = 0
+    scenario_cnt = scenario_error_cnt = scenario_skip_cnt = scenario_fail_cnt = 0
+    scenario_pass_time = scenario_fail_time = 0.0
+
+    for file in argv[1:]:
+        # print "file is {}".format(file)
+        try:
+            tree = cElementTree.parse(file)
+        except ExpatError as exc:
+            print "{} XML processing error: line {}: {}".\
+                format(file, exc.lineno, exc.code)
+            print "Offset: {}".format(exc.offset)
+            raise
+        except IOError as exc:
+            print "{} I/O Error: {}".format(file, exc)
+            raise
+
+        feature_cnt += 1
+        testsuite = tree.getroot()
+        # print "{}\ttestsuite: {}".format(file, testsuite.attrib)
+        scenario_cnt += int(testsuite.get('tests'), 0)
+        scenario_skip_cnt += int(testsuite.get('skipped'), 0)
+        scenario_fail_cnt += int(testsuite.get('failures'), 0)
+        scenario_error_cnt += int(testsuite.get('errors'), 0)
+
+        if not int(testsuite.get('failures'), 0) and \
+                not int(testsuite.get('errors'), 0):
+            feature_pass_cnt += 1
+        else:
+            feature_fail_cnt += 1
+
+        for child in testsuite:
+            if child.attrib.get('status') == 'passed':
+                scenario_pass_time += float(child.attrib.get('time'))
+            else:
+                scenario_fail_time += float(child.attrib.get('time'))
+            # print " {}: {}".format(child.tag, child.attrib)
+
+    # print summary
+    print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    print "{} feature files, {} successful, {} with problems".format(feature_cnt, 
+            feature_pass_cnt, feature_fail_cnt)
+    print "{} scenarios, {} passed, {} errored, {} failed, {} skipped".format(
+            scenario_cnt, 
+            (scenario_cnt - scenario_fail_cnt - scenario_error_cnt - scenario_skip_cnt), 
+            scenario_error_cnt, scenario_fail_cnt, scenario_skip_cnt)
+    print "Took {} (Passing took {}, Failing took {})".format(
+            humantime(scenario_pass_time + scenario_fail_time), 
+            humantime(scenario_pass_time), humantime(scenario_fail_time))
+
+def humantime(allsec):
+    min =  int(allsec / 60)
+    sec = int(allsec) - (min * 60)
+    return "{}m{}s".format(min, sec)
+
+if __name__ == '__main__':
+        main(sys.argv)
